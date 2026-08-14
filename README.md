@@ -38,7 +38,7 @@ cp .env.example .env
 #    编辑 .env：PDSH_API_KEY / PDSH_DB_URL(MySQL) 等
 
 # 3. 初始化数据库表（首次运行自动建表）并启动
-uvicorn pdsh.api.app:app --host 127.0.0.1 --port 8000
+uvicorn src.pdsh.api.app:app --host 127.0.0.1 --port 8000
 
 # 4. 前端开发模式（另开终端）
 cd web && npm install && npm run dev    # http://127.0.0.1:5173，代理 /api 到 8000
