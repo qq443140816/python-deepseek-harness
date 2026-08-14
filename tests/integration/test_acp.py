@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,30 @@ from pdsh.acp.server import AcpServer, _to_acp_update
 from pdsh.config import Settings
 from pdsh.core.loop import LoopEvent
 from pdsh.llm.mock import MockLLM, MockStep
+from pdsh.llm.types import ChatMessage, StreamEvent, ToolSpec
+
+
+class _BlockingLLM:
+    """进入流式后阻塞，直到任务被取消，用于验证 session/cancel 真正打断。"""
+
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+
+    async def stream(
+        self,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec] | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        self.started.set()
+        yield StreamEvent(kind="text_delta", delta="部分内容")
+        await asyncio.Event().wait()
+
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec] | None = None,
+    ) -> str:
+        return ""
 
 
 @pytest.fixture
@@ -78,9 +104,48 @@ async def test_cancel_and_unknown(
     server: AcpServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stdout_json(monkeypatch)
-    assert await server._dispatch("session/cancel", {}) == {}  # noqa: SLF001
+    assert await server._dispatch("session/cancel", {}) == {  # noqa: SLF001
+        "cancelled": False
+    }
     with pytest.raises(ValueError):
         await server._dispatch("bogus/method", {})  # noqa: SLF001
+
+
+async def test_prompt_cancel_interrupts_llm(
+    acp_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    buffer = _stdout_json(monkeypatch)
+    blocking = _BlockingLLM()
+    acp = AcpServer(acp_settings, llm=blocking)
+    await acp.setup()
+    try:
+        new_session = await acp._dispatch("session/new", {})  # noqa: SLF001
+        session_id = new_session["sessionId"]
+
+        acp._start_prompt(  # noqa: SLF001
+            1, {"sessionId": session_id, "prompt": [{"type": "text", "text": "hi"}]}
+        )
+        await asyncio.wait_for(blocking.started.wait(), timeout=1)
+
+        assert await acp._dispatch(  # noqa: SLF001
+            "session/cancel", {"sessionId": session_id}
+        ) == {"cancelled": True}
+
+        task = acp._prompt_tasks.get(session_id)  # noqa: SLF001
+        assert task is not None
+        results = await asyncio.gather(task, return_exceptions=True)
+        assert results and isinstance(results[0], asyncio.CancelledError)
+
+        lines = [json.loads(line) for line in buffer.getvalue().splitlines() if line]
+        responses = [line for line in lines if line.get("id") == 1]
+        assert responses and responses[-1]["result"]["stopReason"] == "cancelled"
+        assert any(
+            line.get("method") == "session/update"
+            and line["params"]["update"].get("sessionUpdate") == "agent_cancel"
+            for line in lines
+        )
+    finally:
+        await acp.close()
 
 
 async def test_handle_line_invalid_json(

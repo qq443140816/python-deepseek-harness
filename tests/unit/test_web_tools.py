@@ -7,10 +7,12 @@ import pytest
 
 from pdsh.tools.base import ToolContext
 from pdsh.tools.web_tools import (
+    BingSearchProvider,
     StubSearchProvider,
     WebFetchTool,
     WebSearchTool,
     _extract_text,
+    _parse_bing_html,
 )
 
 
@@ -103,3 +105,46 @@ async def test_search_provider_raises(context: ToolContext) -> None:
 async def test_stub_provider_returns_placeholder() -> None:
     items = await StubSearchProvider().search("q", 1)
     assert items[0]["title"].startswith("（占位）")
+
+
+def _bing_html(count: int = 2) -> str:
+    blocks = []
+    for i in range(count):
+        blocks.append(
+            '<li class="b_algo"><h2><a href="https://example.com/%d">'
+            "标题%d</a></h2>"
+            '<div class="b_caption"><p class="b_lineclamp2">摘要%d</p></div></li>'
+            % (i, i, i)
+        )
+    return "<html><body>" + "".join(blocks) + "</body></html>"
+
+
+async def test_bing_provider_with_mock_transport(context: ToolContext) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "www.bing.com"
+        assert request.url.params.get("q") == "合规"
+        return httpx.Response(200, text=_bing_html(2))
+
+    provider = BingSearchProvider(transport=httpx.MockTransport(handler))
+    items = await provider.search("合规", 2)
+    assert len(items) == 2
+    assert items[0]["title"] == "标题0"
+    assert items[0]["url"] == "https://example.com/0"
+    assert items[0]["snippet"] == "摘要0"
+
+
+def test_parse_bing_html_caps_top_k() -> None:
+    items = _parse_bing_html(_bing_html(3), top_k=2)
+    assert len(items) == 2
+    assert items[1]["title"] == "标题1"
+
+
+def test_parse_bing_html_strips_tags() -> None:
+    page = (
+        '<li class="b_algo"><h2><a href="https://e.com">'
+        "含<strong>加粗</strong>标题</a></h2>"
+        '<div class="b_caption"><p class="b_lineclamp2">摘要&ensp;内容</p></div></li>'
+    )
+    items = _parse_bing_html(page, top_k=1)
+    assert items[0]["title"] == "含加粗标题"
+    assert items[0]["snippet"] == "摘要 内容"

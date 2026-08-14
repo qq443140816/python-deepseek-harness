@@ -41,7 +41,13 @@ from pdsh.tools.fs import (
 )
 from pdsh.tools.shell import ShellTool
 from pdsh.tools.todo import TodoStore, TodoWriteTool
-from pdsh.tools.web_tools import SearchProvider, WebFetchTool, WebSearchTool
+from pdsh.tools.web_tools import (
+    BingSearchProvider,
+    SearchProvider,
+    StubSearchProvider,
+    WebFetchTool,
+    WebSearchTool,
+)
 
 
 def build_default_registry(
@@ -54,6 +60,8 @@ def build_default_registry(
 ) -> ToolRegistry:
     """装配默认工具注册表。"""
     registry = ToolRegistry(timeout=settings.tool_timeout)
+    if search_provider is None:
+        search_provider = _build_search_provider(settings)
     builtin: list[Tool] = [
         ReadFileTool(),
         WriteFileTool(),
@@ -72,3 +80,10 @@ def build_default_registry(
     for tool in extra_tools:
         registry.register(tool)
     return registry
+
+
+def _build_search_provider(settings: Settings) -> SearchProvider:
+    """按配置构建 web_search 的默认 provider。"""
+    if settings.search_provider == "bing":
+        return BingSearchProvider(timeout=settings.search_timeout)
+    return StubSearchProvider()

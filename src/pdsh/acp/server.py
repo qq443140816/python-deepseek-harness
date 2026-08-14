@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -64,6 +65,7 @@ class AcpServer:
         self._llm: LLMClient | None = None
         self._store: SessionStore | None = None
         self._engine: AsyncEngine | None = None
+        self._prompt_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def setup(self) -> None:
         """初始化存储与 agent 栈。"""
@@ -118,6 +120,9 @@ class AcpServer:
         method = message.get("method", "")
         request_id = message.get("id")
         params = message.get("params") or {}
+        if method == "session/prompt":
+            self._start_prompt(request_id, params)
+            return
         try:
             result = await self._dispatch(method, params)
         except KeyError as exc:
@@ -152,7 +157,7 @@ class AcpServer:
             await self._session_prompt(params)
             return {"stopReason": "end_turn"}
         if method == "session/cancel":
-            return {}
+            return await self._session_cancel(params)
         raise ValueError(f"不支持的方法: {method}")
 
     async def _session_new(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -162,8 +167,18 @@ class AcpServer:
         return {"sessionId": str(entity.id)}
 
     async def _session_prompt(self, params: dict[str, Any]) -> None:
-        loop = self._loop_or_raise()
         session_id = int(params["sessionId"])
+        async for update in self._prompt_updates(session_id, params):
+            self._notify(
+                "session/update",
+                {"sessionId": str(session_id), "update": update},
+            )
+
+    async def _prompt_updates(
+        self, session_id: int, params: dict[str, Any]
+    ) -> AsyncIterator[dict[str, Any]]:
+        """执行一轮对话，产出 ACP session/update 负载。"""
+        loop = self._loop_or_raise()
         blocks = params.get("prompt") or []
         text = "\n".join(
             block.get("text", "")
@@ -175,10 +190,68 @@ class AcpServer:
         async for event in loop.run_turn(session_id, text):
             update = _to_acp_update(event)
             if update is not None:
+                yield update
+
+    def _start_prompt(self, request_id: Any, params: dict[str, Any]) -> None:
+        """把 session/prompt 放入后台任务，使 stdio 主循环可继续读取 cancel。"""
+        session_id = str(params.get("sessionId", ""))
+        if not session_id:
+            self._send_error(request_id, -32602, "缺少参数: sessionId")
+            return
+        if session_id in self._prompt_tasks:
+            self._send_error(request_id, -32602, "该会话已有正在执行的 prompt")
+            return
+        task = asyncio.create_task(self._run_prompt(session_id, request_id, params))
+        self._prompt_tasks[session_id] = task
+
+    async def _run_prompt(
+        self, session_id: str, request_id: Any, params: dict[str, Any]
+    ) -> None:
+        try:
+            numeric_id = int(session_id)
+            async for update in self._prompt_updates(numeric_id, params):
                 self._notify(
                     "session/update",
-                    {"sessionId": str(session_id), "update": update},
+                    {"sessionId": session_id, "update": update},
                 )
+            if request_id is not None:
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {"stopReason": "end_turn"},
+                    }
+                )
+        except asyncio.CancelledError:
+            self._notify(
+                "session/update",
+                {
+                    "sessionId": session_id,
+                    "update": {"sessionUpdate": "agent_cancel", "status": "cancelled"},
+                },
+            )
+            if request_id is not None:
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {"stopReason": "cancelled"},
+                    }
+                )
+            raise
+        except Exception as exc:
+            if request_id is not None:
+                self._send_error(request_id, -32603, str(exc))
+        finally:
+            self._prompt_tasks.pop(session_id, None)
+
+    async def _session_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
+        session_id = str(params.get("sessionId", ""))
+        task = self._prompt_tasks.get(session_id)
+        if task is not None and not task.done():
+            task.cancel()
+            return {"cancelled": True}
+        return {"cancelled": False}
 
     def _notify(self, method: str, params: dict[str, Any]) -> None:
         self._send({"jsonrpc": "2.0", "method": method, "params": params})

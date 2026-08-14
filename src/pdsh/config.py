@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # shell / fs 工具的工作区边界
     workspace: Path = Path("workspace")
 
+    # web_search 默认搜索 provider（bing 为无 key 网页搜索；stub 为占位）
+    search_provider: Literal["bing", "stub"] = "bing"
+    search_timeout: float = Field(default=10.0, gt=0)
+
     # 雪花 ID 机器位
     snowflake_worker_id: int = Field(default=1, ge=0, le=1023)
 

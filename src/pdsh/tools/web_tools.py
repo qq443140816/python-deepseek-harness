@@ -20,11 +20,13 @@
 
 """Web 工具：web_fetch（抓取网页正文）与 web_search（provider 可插拔）。
 
-web_search 默认提供离线 stub；企业可注入自有搜索 provider。
+web_search 默认使用 Bing 网页搜索（无 key）；企业可注入自有搜索 provider。
 """
 
 from __future__ import annotations
 
+import html
+import re
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
@@ -55,6 +57,76 @@ class StubSearchProvider:
                 ),
             }
         ]
+
+
+_BING_SEARCH_URL = "https://www.bing.com/search"
+_BING_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+)
+_BING_RESULT_RE = re.compile(
+    r'<li class="b_algo"[^>]*>(.*?)</li>', re.IGNORECASE | re.DOTALL
+)
+_BING_LINK_RE = re.compile(
+    r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+    re.IGNORECASE | re.DOTALL,
+)
+_BING_SNIPPET_RE = re.compile(
+    r'<p class="b_lineclamp2"[^>]*>(.*?)</p>', re.IGNORECASE | re.DOTALL
+)
+
+
+class BingSearchProvider:
+    """基于 Bing 网页搜索的无 key provider（best-effort，可被企业 provider 替换）。"""
+
+    def __init__(
+        self,
+        timeout: float = 10.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._timeout = timeout
+        self._transport = transport
+
+    async def search(self, query: str, top_k: int) -> list[dict[str, str]]:
+        async with httpx.AsyncClient(
+            timeout=self._timeout,
+            follow_redirects=True,
+            transport=self._transport,
+            headers={"User-Agent": _BING_UA},
+        ) as client:
+            resp = await client.get(
+                _BING_SEARCH_URL, params={"q": query, "count": top_k}
+            )
+            resp.raise_for_status()
+        return _parse_bing_html(resp.text, top_k)
+
+
+def _parse_bing_html(page: str, top_k: int) -> list[dict[str, str]]:
+    """从 Bing 搜索结果页抽取标题 / 链接 / 摘要（尽力而为）。"""
+    results: list[dict[str, str]] = []
+    for block in _BING_RESULT_RE.findall(page):
+        link = _BING_LINK_RE.search(block)
+        if link is None:
+            continue
+        snippet_match = _BING_SNIPPET_RE.search(block)
+        snippet = _strip_html(snippet_match.group(1)) if snippet_match else ""
+        results.append(
+            {
+                "title": _strip_html(link.group(2)),
+                "url": link.group(1),
+                "snippet": snippet,
+            }
+        )
+        if len(results) >= top_k:
+            break
+    return results
+
+
+def _strip_html(text: str) -> str:
+    """去除 HTML 标签与实体，压缩空白。"""
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 class WebFetchTool(BaseTool):
@@ -95,8 +167,6 @@ class WebFetchTool(BaseTool):
 
 def _extract_text(html: str) -> str:
     """轻量 HTML→文本提取（不引入额外依赖）。"""
-    import re
-
     body = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", html)
     body = re.sub(r"(?s)<[^>]+>", "\n", body)
     lines = [ln.strip() for ln in body.splitlines()]
