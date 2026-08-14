@@ -1,0 +1,371 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --border: #e3e6ea;
+  --text: #1f2430;
+  --muted: #8a93a6;
+  --primary: #2f6bff;
+  --primary-soft: #e8efff;
+  --error: #c0392b;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.layout {
+  display: flex;
+  height: 100vh;
+}
+
+/* 侧边栏 */
+.sidebar {
+  width: 260px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.btn-new {
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-new:hover {
+  background: var(--primary-soft);
+}
+
+.session-list {
+  list-style: none;
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.session-list li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.session-list li:hover {
+  background: #f0f2f6;
+}
+
+.session-list li.active {
+  background: var(--primary-soft);
+}
+
+.session-title {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.btn-del {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-del:hover {
+  color: var(--error);
+}
+
+.session-empty {
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+/* 主区域 */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  gap: 8px;
+}
+
+.global-error {
+  color: var(--error);
+  text-align: center;
+  padding: 6px;
+  font-size: 13px;
+}
+
+/* 聊天区 */
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  display: flex;
+}
+
+.msg-user {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 72%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.bubble-user {
+  background: var(--primary);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.bubble-assistant {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.msg-error {
+  color: var(--error);
+  font-size: 13px;
+}
+
+.thinking {
+  background: #f7f8fa;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.thinking pre {
+  white-space: pre-wrap;
+  margin-top: 6px;
+}
+
+/* 工具卡片 */
+.tool-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.tool-card.tool-error {
+  border-color: #e6b0aa;
+}
+
+.tool-card summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-name {
+  font-weight: 600;
+}
+
+.tool-status {
+  font-size: 12px;
+}
+
+.tool-status.pending {
+  color: var(--muted);
+}
+
+.tool-status.ok {
+  color: #2e8b57;
+}
+
+.tool-status.error {
+  color: var(--error);
+}
+
+.tool-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.tool-section pre {
+  background: #22272e;
+  color: #d8dee9;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ask_user 卡片 */
+.ask-card {
+  background: #fff8e6;
+  border: 1px solid #f0dca0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.ask-question {
+  margin-bottom: 8px;
+}
+
+.ask-answer {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ask-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ask-input-row input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.ask-input-row button {
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.streaming-hint {
+  color: var(--muted);
+  font-size: 12px;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* 输入区 */
+.composer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 32px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.composer textarea:focus {
+  outline: 2px solid var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.composer button {
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 22px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
