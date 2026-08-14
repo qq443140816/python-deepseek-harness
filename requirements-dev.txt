@@ -1,0 +1,11 @@
+# 开发依赖（与 pyproject.toml [project.optional-dependencies].dev 保持一致）
+-r requirements.txt
+pytest>=7.0
+pytest-asyncio>=0.21
+pytest-cov>=4.0
+black>=23.0
+isort>=5.12
+flake8>=6.0
+mypy>=1.0
+bandit>=1.7
+build>=1.0
