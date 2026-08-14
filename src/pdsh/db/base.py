@@ -46,6 +46,7 @@ class BaseEntity(MinimalEntity):
     """通用实体基类：乐观锁 + 审计 + 软删除。"""
 
     __abstract__ = True
+    __mapper_args__ = {"eager_defaults": True}
 
     revision: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, comment="乐观锁版本号"
